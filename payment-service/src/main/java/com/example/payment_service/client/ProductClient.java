@@ -12,4 +12,7 @@ public interface ProductClient {
     @GetMapping("/products/{id}")
     ProductDto getProductById(@PathVariable("id") Long id);
 
+    @GetMapping("/products/name/{name}")
+    ProductDto getProductByName(@PathVariable("name") String name);
+
 }

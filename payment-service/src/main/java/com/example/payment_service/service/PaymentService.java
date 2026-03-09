@@ -51,7 +51,8 @@ public class PaymentService {
     public void handleStockDeducted(OrderDto orderDto) {
         log.info("Stock deducted event received for Order ID: {}", orderDto.getId());
         try {
-            ProductDto product = productClient.getProductById(orderDto.getId());
+            // Fetch product by name from Product Service to get the latest unit price
+            ProductDto product = productClient.getProductByName(orderDto.getProductName());
             double totalAmount = orderDto.getQuantity() * product.getPrice();
 
             PaymentDto paymentDto = new PaymentDto();
@@ -119,7 +120,7 @@ public class PaymentService {
     public OrderDto fallbackGetOrderById(Long orderId, Throwable throwable) {
         log.error("Circuit Breaker: Order Service is DOWN. Falling back for Order ID: {}. Reason: {}",
                 orderId, throwable.getMessage());
-        return new OrderDto(orderId, "Fallback Order", 0);
+        return new OrderDto(orderId, "Fallback Order", 0, "FALLBACK");
     }
 
     public ProductDto fallbackGetProductById(Long productId, Throwable throwable) {
@@ -131,7 +132,7 @@ public class PaymentService {
     // ---------------------- Business Logic ----------------------
 
     // Simulated max payment limit (replace with real balance/wallet check in production)
-    private static final double MAX_PAYMENT_LIMIT = 10000.0;
+    private static final double MAX_PAYMENT_LIMIT = 1000000.0;
 
     public PaymentDto processPayment(PaymentDto dto, OrderDto orderDto) {
         log.info("Processing payment for Order ID: {}. Amount: {}", dto.getOrderId(), dto.getAmount());

@@ -28,6 +28,12 @@ public class ProductController {
         return productService.getProductById(id);
     }
 
+    // Get product by name
+    @GetMapping("/name/{name}")
+    public ProductDto getProductByName(@PathVariable String name) {
+        return productService.getProductByName(name);
+    }
+
     // Create a new product
     @PostMapping
     public ProductDto createProduct(@RequestBody ProductDto productDto) {
@@ -46,4 +52,6 @@ public class ProductController {
         productService.deleteProduct(id);
         return "Product deleted successfully";
     }
+
+
 }

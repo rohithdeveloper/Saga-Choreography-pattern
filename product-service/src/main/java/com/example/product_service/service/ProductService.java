@@ -57,6 +57,17 @@ public class ProductService {
         return convertToDto(product);
     }
 
+    // Get product by name and return as DTO
+    public ProductDto getProductByName(String name) {
+        log.info("Fetching product with name: {}", name);
+        Product product = productRepository.findByNameIgnoreCase(name)
+                .orElseThrow(() -> {
+                    log.error("Product not found with name: {}", name);
+                    return new RuntimeException("Product not found with name " + name);
+                });
+        return convertToDto(product);
+    }
+
     // Create a new product from DTO
     public ProductDto createProduct(ProductDto productDto) {
         log.info("Creating new product: {}", productDto.getName());
@@ -89,32 +100,38 @@ public class ProductService {
     @RabbitListener(queues = "${rabbitmq.queue.order-created}")
     @Transactional // Very important: ensures the update is saved safely
     public void handleOrderCreated(OrderDto orderDto) {
-        log.info("Received Order Created Event for Product: {}", orderDto.getProductName()+ " with "+ orderDto.getId());
-        // 1. Find product by name from the event
-        Product product = productRepository.findByNameIgnoreCase(orderDto.getProductName())
-                .orElseThrow(() -> new RuntimeException("Product not found: " + orderDto.getProductName()));
+        log.info("Received Order Created Event for Product: {} for Order ID: {}", orderDto.getProductName(), orderDto.getId());
+        
+        try {
+            // 1. Find product by name from the event
+            Product product = productRepository.findByNameIgnoreCase(orderDto.getProductName())
+                    .orElseThrow(() -> new RuntimeException("Product not found: " + orderDto.getProductName()));
 
-        // 2. Logic: Check if we have enough
-        if (product.getStock() >= orderDto.getQuantity()) {
-            // 3. Subtract from current stock
-            int updatedStock = product.getStock() - orderDto.getQuantity();
-            product.setStock(updatedStock);
+            // 2. Logic: Check if we have enough stock
+            if (product.getStock() >= orderDto.getQuantity()) {
+                // 3. Subtract from current stock
+                int updatedStock = product.getStock() - orderDto.getQuantity();
+                product.setStock(updatedStock);
 
-            // 4. PERSIST: This saves the new stock value to the DB
-            productRepository.save(product);
+                // 4. PERSIST: Save the new stock value to the DB
+                productRepository.save(product);
 
-            // 5. PUBLISH EVENT TO PAYMENT SERVICE
-            // We pass the orderDto so Payment knows the orderId and amount to charge
-            rabbitTemplate.convertAndSend(productExchange, stockDeductedKey, orderDto);
-            log.info("Inventory Deducted. Product: {}, New Stock: {}. Event sent to Payment Service.",
-                    product.getName(), updatedStock);
-            // Next Step: You could send a 'StockReserved' message to Payment Service here
-        } else {
-            log.warn("INSUFFICIENT STOCK: Order ID {} requires {} of {}, but only {} available.",
-                    orderDto.getId(), orderDto.getQuantity(), product.getName(), product.getStock());
-            // Trigger rollback — notify Order Service to cancel the order
+                // 5. PUBLISH EVENT TO PAYMENT SERVICE
+                rabbitTemplate.convertAndSend(productExchange, stockDeductedKey, orderDto);
+                log.info("Inventory Deducted for Order ID {}. Product: {}, New Stock: {}. Event sent to Payment Service.",
+                        orderDto.getId(), product.getName(), updatedStock);
+            } else {
+                log.warn("INSUFFICIENT STOCK: Order ID {} requires {} of {}, but only {} available.",
+                        orderDto.getId(), orderDto.getQuantity(), product.getName(), product.getStock());
+                // Trigger rollback — notify Order Service to cancel the order
+                rabbitTemplate.convertAndSend(orderExchange, orderCancelledKey, orderDto);
+                log.info("Sent cancellation event for Order ID: {} due to insufficient stock", orderDto.getId());
+            }
+        } catch (Exception e) {
+            log.error("CRITICAL ERROR in Product Service Saga: {}. Triggering rollback for Order ID: {}", 
+                    e.getMessage(), orderDto.getId());
+            // Fail-safe: send cancellation so Order doesn't stay PENDING
             rabbitTemplate.convertAndSend(orderExchange, orderCancelledKey, orderDto);
-            log.info("Sent cancellation event for Order ID: {} due to insufficient stock", orderDto.getId());
         }
     }
 

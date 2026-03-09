@@ -120,7 +120,7 @@ public class OrderRmqConfig {
                 .with(orderCancelledKey);
     }
 
-    @Bean
+     @Bean
     public MessageConverter messageConverter() {
         return new Jackson2JsonMessageConverter();
     }

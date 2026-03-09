@@ -34,11 +34,11 @@ sequenceDiagram
     PS->>PS: Check stock availability
     PS->>PS: Deduct stock from inventory
     PS->>RMQ: Publish StockDeducted event
-    Note over RMQ: Exchange: order.exchange<br/>Routing Key: stock.deducted<br/>Queue: stock-deducted-queue
+    Note over RMQ: Exchange: order.exchange<br/>Routing Key: stock.deducted<br/>Queue: stock.deducted.queue
 
     RMQ->>PMS: Deliver to Payment Service
     PMS->>PMS: Calculate total amount
-    PMS->>PMS: Validate payment (amount ≤ ₹10,000)
+    PMS->>PMS: Validate payment (amount ≤ ₹1,000,000)
     PMS->>PMS: Save payment with status = SUCCESS
     PMS->>RMQ: Publish PaymentSuccess event
     Note over RMQ: Exchange: order.exchange<br/>Routing Key: payment.success<br/>Queue: payment.success.queue
@@ -54,7 +54,7 @@ sequenceDiagram
 3. **Product Service receives** the event, finds the product by name, checks stock
 4. **Stock is sufficient** → Product Service deducts stock and publishes `StockDeducted` event
 5. **Payment Service receives** the event, fetches product price, calculates total
-6. **Payment is valid** (amount ≤ ₹10,000) → saves payment as `SUCCESS`, publishes `PaymentSuccess` event
+6. **Payment is valid** (amount ≤ ₹1,000,000) → saves payment as `SUCCESS`, publishes `PaymentSuccess` event
 7. **Order Service receives** the success signal → updates order status to `COMPLETED`
 
 ---
@@ -104,7 +104,7 @@ sequenceDiagram
     PS->>RMQ: Publish StockDeducted event
 
     RMQ->>PMS: Deliver to Payment Service
-    PMS->>PMS: Calculate total — amount > ₹10,000 ❌
+    PMS->>PMS: Calculate total — amount > ₹1,000,000 ❌
     PMS->>PMS: Save payment with status = FAILED
     PMS->>RMQ: Publish OrderCancelled event
     Note over RMQ: Exchange: order.exchange<br/>Routing Key: order.cancelled<br/>Queue: order.cancelled.queue
@@ -135,7 +135,7 @@ sequenceDiagram
 | `order.created.queue` | Product Service | Receives new order events to trigger stock deduction |
 | `order.updated.queue` | — | Receives order update events (for future use) |
 | `order.deleted.queue` | — | Receives order deletion events (for future use) |
-| `stock-deducted-queue` | Payment Service | Receives stock deduction confirmation to trigger payment processing |
+| `stock.deducted.queue` | Payment Service | Receives stock deduction confirmation to trigger payment processing |
 | `payment.success.queue` | Order Service | Receives payment success signal to finalize the order as COMPLETED |
 | `order.cancelled.queue` | Order Service, Product Service | Receives cancellation/rollback signal — Order Service marks CANCELLED, Product Service restores stock |
 
@@ -157,7 +157,7 @@ order.exchange
 ├── order.created    → order.created.queue      (Product Service listens)
 ├── order.updated    → order.updated.queue
 ├── order.deleted    → order.deleted.queue
-├── stock.deducted   → stock-deducted-queue      (Payment Service listens)
+├── stock.deducted   → stock.deducted.queue      (Payment Service listens)
 ├── payment.success  → payment.success.queue     (Order Service listens)
 └── order.cancelled  → order.cancelled.queue     (Order + Product Service listen)
 ```

@@ -86,6 +86,7 @@ public class ProductRmqConfig {
                 .to(productExchange())
                 .with(stockDeductedKey);
     }
+
     @Bean
     public MessageConverter messageConverter() {
         return new Jackson2JsonMessageConverter();

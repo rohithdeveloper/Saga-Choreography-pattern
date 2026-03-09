@@ -119,8 +119,8 @@ public class OrderService {
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Order not found"));
 
-        // External Feign call to Product Service
-        ProductDto product = productClient.getProductById(order.getId());
+        // External Feign call to Product Service (Fetch by Name, as IDs may not match)
+        ProductDto product = productClient.getProductByName(order.getProduct());
         log.debug("Received product details from Product Service: {}", product.getName());
 
         return new OrderDto(order.getId(), product.getName(), order.getQuantity(), order.getStatus());
