@@ -1,6 +1,9 @@
 package com.example.payment_service.config;
 
 import org.springframework.amqp.core.*;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.amqp.rabbit.core.RabbitAdmin;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.beans.factory.annotation.Value;
@@ -29,6 +32,9 @@ public class PaymentRmqConfig {
 
     @Value("${rabbitmq.order.routing.cancelled}")
     private String orderCancelledKey;
+
+    @Value("${rabbitmq.product.routing.deducted:stock.deducted}")
+    private String stockDeductedKey;
 
     // 1. Declare the Exchange
     // This acts as the central router for your Order events
@@ -74,10 +80,32 @@ public class PaymentRmqConfig {
                 .with(orderCancelledKey);
     }
 
+    // Binding so stock-deducted messages reach this service via the exchange
+    @Bean
+    public Binding stockDeductedBinding() {
+        return BindingBuilder
+                .bind(stockDeductedQueue())
+                .to(orderExchange())
+                .with(stockDeductedKey);
+    }
+
     // 4. JSON Converter
-    // Ensures DTO objects are converted to JSON for the RabbitMQ broker
     @Bean
     public MessageConverter messageConverter() {
         return new Jackson2JsonMessageConverter();
+    }
+
+    @Bean
+    public AmqpTemplate amqpTemplate(ConnectionFactory connectionFactory) {
+        RabbitTemplate rabbitTemplate = new RabbitTemplate(connectionFactory);
+        rabbitTemplate.setMessageConverter(messageConverter());
+        return rabbitTemplate;
+    }
+
+    @Bean
+    public RabbitAdmin rabbitAdmin(ConnectionFactory connectionFactory) {
+        RabbitAdmin admin = new RabbitAdmin(connectionFactory);
+        admin.setAutoStartup(true);
+        return admin;
     }
 }

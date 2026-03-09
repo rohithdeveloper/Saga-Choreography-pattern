@@ -52,17 +52,19 @@ public class PaymentService {
         log.info("Stock deducted event received for Order ID: {}", orderDto.getId());
         try {
             ProductDto product = productClient.getProductById(orderDto.getId());
-            double actualAmount = orderDto.getQuantity() * product.getPrice();
+            double totalAmount = orderDto.getQuantity() * product.getPrice();
 
             PaymentDto paymentDto = new PaymentDto();
             paymentDto.setOrderId(orderDto.getId());
-            paymentDto.setAmount(actualAmount);
+            paymentDto.setAmount(totalAmount);
             paymentDto.setStatus("PENDING");
 
-            processPayment(paymentDto, actualAmount, orderDto);
+            processPayment(paymentDto, orderDto);
         } catch (Exception e) {
             log.error("CRITICAL: Failed to process automated payment for Order {}. Error: {}",
                     orderDto.getId(), e.getMessage());
+            // Trigger rollback on any unexpected failure
+            rabbitTemplate.convertAndSend(orderExchange, orderCancelledKey, orderDto);
         }
     }
 
@@ -128,7 +130,10 @@ public class PaymentService {
 
     // ---------------------- Business Logic ----------------------
 
-    public PaymentDto processPayment(PaymentDto dto,double actualAmount,OrderDto orderDto) {
+    // Simulated max payment limit (replace with real balance/wallet check in production)
+    private static final double MAX_PAYMENT_LIMIT = 10000.0;
+
+    public PaymentDto processPayment(PaymentDto dto, OrderDto orderDto) {
         log.info("Processing payment for Order ID: {}. Amount: {}", dto.getOrderId(), dto.getAmount());
         Payment payment = paymentRepository.findByOrderId(dto.getOrderId());
         if (payment == null) {
@@ -138,17 +143,18 @@ public class PaymentService {
             payment.setStatus("PENDING");
         }
 
-        if (dto.getAmount() ==actualAmount) {
+        // Real validation: check if amount is within the allowed payment limit
+        if (dto.getAmount() <= MAX_PAYMENT_LIMIT) {
             payment.setStatus("SUCCESS");
             rabbitTemplate.convertAndSend(orderExchange, paymentSuccessKey, orderDto.getId());
-            log.info("Payment SUCCESS for Order ID: {}. Routing key: {}", orderDto.getId(), paymentSuccessKey);
+            log.info("Payment SUCCESS for Order ID: {}. Amount: {}. Routing key: {}",
+                    orderDto.getId(), dto.getAmount(), paymentSuccessKey);
         } else {
             payment.setStatus("FAILED");
-            // COMPENSATION PATH: Publish to rabbitmq.queue.order-cancelled
-            // We send the full orderDto so Product Service can restore stock
+            // COMPENSATION PATH: Publish cancellation so Product restores stock & Order gets cancelled
             rabbitTemplate.convertAndSend(orderExchange, orderCancelledKey, orderDto);
-            log.warn("Payment FAILED (Price Mismatch). Expected: {}, Received: {}. Sending Rollback for Order: {}",
-                    actualAmount, dto.getAmount(), orderDto.getId());
+            log.warn("Payment FAILED (Amount {} exceeds limit {}). Sending Rollback for Order: {}",
+                    dto.getAmount(), MAX_PAYMENT_LIMIT, orderDto.getId());
         }
 
         Payment saved = paymentRepository.save(payment);

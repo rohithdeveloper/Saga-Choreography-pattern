@@ -61,10 +61,11 @@ public class OrderService {
         log.info("Order created with ID: {} and status: PENDING", savedOrder.getId());
 
         // Publish event to start the Saga (Product Service listens to this)
+        // IMPORTANT: Send DTO, not entity — entity field "product" won't map to DTO field "productName"
         rabbitTemplate.convertAndSend(
                 orderExchange,
                 orderCreatedKey,
-                savedOrder
+                convertToDto(savedOrder)
         );
         log.debug("Sent OrderCreated event to exchange: {} with routing key: {}", orderExchange, orderCreatedKey);
         return convertToDto(savedOrder);
@@ -88,7 +89,7 @@ public class OrderService {
         rabbitTemplate.convertAndSend(
                 orderExchange,
                 orderUpdatedKey,
-                updatedOrder
+                convertToDto(updatedOrder)
         );
 
         return convertToDto(updatedOrder);
@@ -106,7 +107,7 @@ public class OrderService {
         rabbitTemplate.convertAndSend(
                 orderExchange,
                 orderDeletedKey,
-                order
+                convertToDto(order)
         );
     }
 

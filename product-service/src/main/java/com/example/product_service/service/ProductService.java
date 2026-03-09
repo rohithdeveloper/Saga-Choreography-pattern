@@ -31,6 +31,12 @@ public class ProductService {
     @Value("${rabbitmq.product.routing.deducted}")
     private String stockDeductedKey;
 
+    @Value("${rabbitmq.order.exchange}")
+    private String orderExchange;
+
+    @Value("${rabbitmq.order.routing.cancelled}")
+    private String orderCancelledKey;
+
     // Get all products and return as DTOs
     public List<ProductDto> getAllProducts() {
         log.info("Fetching all products");
@@ -105,7 +111,10 @@ public class ProductService {
             // Next Step: You could send a 'StockReserved' message to Payment Service here
         } else {
             log.warn("INSUFFICIENT STOCK: Order ID {} requires {} of {}, but only {} available.",
-                    orderDto.getId(), orderDto.getQuantity(), product.getName(), product.getStock());            // Handle failure (e.g., notify Order Service that order is cancelled)
+                    orderDto.getId(), orderDto.getQuantity(), product.getName(), product.getStock());
+            // Trigger rollback — notify Order Service to cancel the order
+            rabbitTemplate.convertAndSend(orderExchange, orderCancelledKey, orderDto);
+            log.info("Sent cancellation event for Order ID: {} due to insufficient stock", orderDto.getId());
         }
     }
 
